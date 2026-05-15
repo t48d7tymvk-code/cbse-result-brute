@@ -3,60 +3,83 @@ import os
 import time
 import string
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import NoSuchElementException
 
-# ====================== CONFIGURATION ======================
+# ========================= CONFIGURATION =========================
 URL = "https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html"
 
 def get_driver():
-    """Sets up a memory-optimized Chrome instance for Render."""
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=800,600")
-    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+    """Sets up a lean, headless Chrome instance for Render."""
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1280,720")
+    options.add_argument("--blink-settings=imagesEnabled=false")
     
-    # Render's specific Chrome binary path
+    # Path where render-build.sh installs Chrome
     render_bin = "/opt/render/project/src/.render/chrome/opt/google/chrome/google-chrome"
     if os.path.exists(render_bin):
-        chrome_options.binary_location = render_bin
-    
-    # Using Selenium 4.10+ native manager (No webdriver-manager needed)
-    return webdriver.Chrome(options=chrome_options)
+        options.binary_location = render_bin
+        
+    # Selenium 4.10+ will automatically find the matching v148 driver
+    return webdriver.Chrome(options=options)
 
 def is_success(driver):
-    """Checks for the absence of the 'No data found' error message."""
+    """Your exact logic: Returns True if result is shown (no error)"""
     try:
-        time.sleep(1.2) 
-        error_elements = driver.find_elements(By.ID, "err_msg")
-        if not error_elements:
+        # 1. Look for error message
+        try:
+            error_elem = driver.find_element(By.ID, "err_msg")
+            if error_elem.is_displayed() and error_elem.text.strip():
+                return False
+        except NoSuchElementException:
+            pass 
+        
+        # 2. Check for success indicators in page source
+        success_indicators = ["marks", "result", "subject", "grade", "total"]
+        page_text = driver.page_source.lower()
+        if any(ind in page_text for ind in success_indicators):
             return True
             
-        error_msg = error_elements[0]
-        if error_msg.is_displayed() and "no data found" in error_msg.text.lower():
-            return False
+        # 3. Check for URL changes
+        if "result" in driver.current_url.lower() and "error" not in driver.current_url.lower():
+            return True
             
-        return True
-    except:
-        return False
+    except Exception:
+        pass
+    return False
 
-# ====================== STREAMLIT UI ======================
-st.set_page_config(page_title="CBSE Recovery", page_icon="🔍")
-st.title("🔍 CBSE 12th Admit ID Recovery")
+# ========================= STREAMLIT UI =========================
+st.set_page_config(page_title="Admit ID Recovery", page_icon="🎓", layout="centered")
 
-st.sidebar.header("Inputs")
-roll_val = st.sidebar.text_input("Roll Number", value="18615895")
-suffix_val = st.sidebar.text_input("Known Suffix (Last 6)", value="954511")
-delay_val = st.sidebar.slider("Delay (Seconds)", 0.5, 5.0, 1.5)
+# Custom CSS for a better look
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #ff4b4b; color: white; }
+    .stTextInput>div>div>input { border-radius: 5px; }
+    </style>
+    """, unsafe_allow_value=True)
 
-if st.button("🚀 Start Recovery Process", type="primary"):
-    status_container = st.empty()
+st.title("🎓 CBSE 12th Admit ID Recovery")
+st.info("This tool automates the recovery of your Admit Card ID by testing alphabetical prefixes.")
+
+# Input Layout
+col1, col2 = st.columns(2)
+with col1:
+    roll_val = st.text_input("Roll Number", value="18615899")
+with col2:
+    suffix_val = st.text_input("Last 6 Characters", value="994511")
+
+delay_val = st.slider("Delay per attempt (Seconds)", 0.2, 3.0, 0.5)
+
+if st.button("🚀 Start Brute Force"):
+    status_log = st.empty()
     progress_bar = st.progress(0)
-    log_area = st.expander("Attempt Logs", expanded=False)
     
     driver = None
     try:
@@ -65,37 +88,40 @@ if st.button("🚀 Start Recovery Process", type="primary"):
         
         letters = string.ascii_uppercase
         combos = [f"{a}{b}" for a in letters for b in letters]
+        total = len(combos)
         
-        for i, prefix in enumerate(combos):
-            full_id = f"{prefix}{suffix_val}"
-            
-            # Update UI
-            status_container.info(f"Testing: **{full_id}** ({i+1}/{len(combos)})")
-            progress_bar.progress((i + 1) / len(combos))
-            
-            try:
-                # Use JS injection to fill and submit
-                driver.execute_script(f"document.getElementById('rroll').value = '{roll_val}';")
-                driver.execute_script(f"document.getElementById('admn_id').value = '{full_id}';")
-                driver.execute_script("document.getElementById('submit').click();")
+        # We use st.status for a better "live" log look
+        with st.status("Initializing...", expanded=True) as status:
+            for i, prefix in enumerate(combos):
+                code = f"{prefix}{suffix_val}"
+                status.update(label=f"Testing Prefix: **{prefix}** ({i+1}/{total})")
+                progress_bar.progress((i + 1) / total)
                 
-                time.sleep(delay_val)
-                
-                if is_success(driver):
-                    st.balloons()
-                    st.success(f"🎉 **MATCH FOUND!** Admit Card ID: `{full_id}`")
-                    st.code(full_id, language="text")
-                    break
-                else:
-                    log_area.write(f"❌ {full_id}: Incorrect")
+                try:
+                    # Clear and fill using your logic
+                    driver.find_element(By.ID, "rroll").clear()
+                    driver.find_element(By.ID, "rroll").send_keys(roll_val)
                     
-            except Exception:
-                driver.get(URL)
-                continue
-                
-        else:
-            st.warning("All combinations tested. No match found.")
-            
+                    driver.find_element(By.ID, "admn_id").clear()
+                    driver.find_element(By.ID, "admn_id").send_keys(code)
+                    
+                    driver.find_element(By.ID, "submit").click()
+                    
+                    time.sleep(delay_val)
+                    
+                    if is_success(driver):
+                        status.update(label="✅ Match Found!", state="complete")
+                        st.balloons()
+                        st.success(f"### 🎉 Success!\n**Prefix:** {prefix}\n**Full Code:** `{code}`")
+                        st.code(code, language="text")
+                        break
+                        
+                except Exception as e:
+                    continue 
+            else:
+                status.update(label="❌ Finished with no success", state="error")
+                st.warning("All 676 combinations exhausted.")
+
     except Exception as e:
         st.error(f"Critical System Error: {e}")
     finally:
