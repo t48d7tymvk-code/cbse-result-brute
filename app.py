@@ -9,8 +9,8 @@ st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
 st.title("🔍 CBSE 12th Result Brute Forcer")
 st.markdown("### Finds the missing 2 letters in Admission ID")
 
-roll_number = st.text_input("Roll Number", value="18615900", help="Your 8-digit roll number")
-known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
+roll_number = st.text_input("Roll Number", value="18615907", help="Your 8-digit roll number")
+known_last_6 = st.text_input("Known Last 6 Characters", value="074511", max_chars=6)
 delay = st.slider("Delay between attempts (seconds)", 1.5, 4.0, 2.2)
 
 if st.button("🚀 Start Brute Force", type="primary"):
