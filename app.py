@@ -14,7 +14,7 @@ import string
 URL = "https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html"
 
 def get_driver():
-    """Sets up the Chrome driver for both Local and Render environments."""
+    """Sets up Chrome for both Local and Render environments."""
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
@@ -22,32 +22,35 @@ def get_driver():
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
     
-    # Path where render-build.sh installs Chrome on Render's servers
-    render_chrome_bin = "/opt/render/project/src/.render/chrome/opt/google/chrome/google-chrome"
+    # Render's specific Chrome binary path (from render-build.sh)
+    render_bin = "/opt/render/project/src/.render/chrome/opt/google/chrome/google-chrome"
     
-    if os.path.exists(render_chrome_bin):
-        chrome_options.binary_location = render_chrome_bin
+    if os.path.exists(render_bin):
+        chrome_options.binary_location = render_bin
+        st.sidebar.success("✅ Using Render Chrome Binary")
+    else:
+        st.sidebar.info("ℹ️ Using System Chrome (Local Mode)")
     
-    # webdriver-manager automatically downloads the matching ChromeDriver
+    # Automatically manages the ChromeDriver version
     service = Service(ChromeDriverManager().install())
     return webdriver.Chrome(service=service, options=chrome_options)
 
 def is_success(driver):
-    """Detects if the result was found based on keywords or URL changes."""
+    """Detects if we broke through to the result page."""
     try:
-        # 1. Check for specific error message text
+        # Check for error text (if it exists, we failed)
         error_elements = driver.find_elements(By.ID, "err_msg")
         if error_elements and error_elements[0].is_displayed():
             if error_elements[0].text.strip():
                 return False
         
-        # 2. Check for success keywords in page content
-        page_text = driver.page_source.lower()
-        success_indicators = ["marks", "subject", "grade", "total", "percentage", "pass"]
-        if any(ind in page_text for ind in success_indicators):
+        # Check for success keywords
+        page_source = driver.page_source.lower()
+        keywords = ["marks", "subject", "grade", "total", "percentage", "pass"]
+        if any(word in page_source for word in keywords):
             return True
             
-        # 3. Check if the URL changed to a result page
+        # Check for URL change
         if "result" in driver.current_url.lower() and "html" not in driver.current_url.lower():
             return True
     except:
@@ -56,74 +59,71 @@ def is_success(driver):
 
 # ====================== STREAMLIT UI ======================
 st.set_page_config(page_title="CBSE Result Recovery", layout="centered")
-st.title("🔍 CBSE 12th Result Recovery Tool")
-st.info("Note: This tool is for recovering lost Admit Card IDs using known suffixes.")
+st.title("🔍 CBSE 12th Admit ID Recovery")
 
-# User Inputs
+# Inputs
 roll_number = st.text_input("Roll Number", value="18615900")
 known_suffix = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
-delay = st.slider("Seconds between attempts", 1.0, 5.0, 2.5, 0.5)
+delay = st.slider("Wait time per attempt (Seconds)", 1.0, 5.0, 2.5)
 
-if st.button("🚀 Start Recovery Process", type="primary"):
+if st.button("🚀 Start Recovery", type="primary"):
     if len(known_suffix) != 6:
-        st.error("The last 6 characters must be exactly 6 digits/letters.")
+        st.error("The suffix must be exactly 6 characters.")
     else:
-        status = st.empty()
-        progress = st.progress(0)
-        log_expander = st.expander("Detailed Attempt Log", expanded=True)
+        status_box = st.empty()
+        progress_bar = st.progress(0)
+        log = st.expander("Attempt Log", expanded=True)
         
         driver = None
         try:
             driver = get_driver()
             letters = string.ascii_uppercase
-            combinations = [f"{a}{b}" for a in letters for b in letters]
-            total_attempts = len(combinations)
+            combos = [f"{a}{b}" for a in letters for b in letters]
+            total = len(combos)
 
-            for index, prefix in enumerate(combinations):
+            for i, prefix in enumerate(combos):
                 full_id = f"{prefix}{known_suffix}"
                 
                 # Update UI
-                status.info(f"Testing: **{full_id}** ({index+1}/{total_attempts})")
-                progress.progress((index + 1) / total_attempts)
+                status_box.info(f"Trying: **{full_id}** ({i+1}/{total})")
+                progress_bar.progress((i + 1) / total)
 
                 try:
-                    # RE-LOAD URL every time to prevent 'StaleElementReferenceException'
+                    # RE-LOAD URL every time to avoid stale elements
                     driver.get(URL)
                     wait = WebDriverWait(driver, 10)
                     
-                    # Locate and Fill
-                    roll_input = wait.until(EC.presence_of_element_located((By.ID, "rroll")))
-                    admn_input = driver.find_element(By.ID, "admn_id")
+                    # Fill inputs
+                    roll_field = wait.until(EC.presence_of_element_located((By.ID, "rroll")))
+                    admn_field = driver.find_element(By.ID, "admn_id")
                     
-                    roll_input.clear()
-                    roll_input.send_keys(roll_number)
-                    admn_input.clear()
-                    admn_input.send_keys(full_id)
+                    roll_field.clear()
+                    roll_field.send_keys(roll_number)
+                    admn_field.clear()
+                    admn_field.send_keys(full_id)
                     
                     # Submit
                     driver.find_element(By.ID, "submit").click()
                     
-                    # Wait for server response
+                    # Wait for network
                     time.sleep(delay)
 
-                    # Check Success
                     if is_success(driver):
                         st.balloons()
-                        st.success(f"✅ **FOUND MATCH!**\n\nAdmit Card ID: `{full_id}`")
-                        st.code(f"Roll: {roll_number}\nAdmit Card ID: {full_id}", language="text")
+                        st.success(f"🎊 **FOUND MATCH!**\n\nAdmit Card ID: `{full_id}`")
+                        st.code(f"ID: {full_id}", language="text")
                         break
                     else:
-                        log_expander.write(f"❌ {full_id} - Incorrect")
-
+                        log.write(f"❌ {full_id} - Incorrect")
+                        
                 except Exception as e:
-                    log_expander.error(f"⚠️ Error testing {full_id}: {str(e)[:50]}")
+                    log.error(f"⚠️ Error on {full_id}: {str(e)[:50]}")
                     continue
-
             else:
-                st.warning("Finished all 676 combinations without a match.")
+                st.warning("All 676 combinations exhausted. No match found.")
 
         except Exception as e:
-            st.error(f"Critical System Error: {e}")
+            st.error(f"System Error: {e}")
         finally:
             if driver:
                 driver.quit()
