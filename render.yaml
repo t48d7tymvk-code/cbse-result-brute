@@ -2,5 +2,6 @@ services:
   - type: web
     name: cbse-brute
     env: python
-    buildCommand: pip install -r requirements.txt
+    # This is the fix:
+    buildCommand: bash render-build.sh
     startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
