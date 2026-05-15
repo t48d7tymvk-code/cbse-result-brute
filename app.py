@@ -25,12 +25,11 @@ def get_driver():
     if os.path.exists(render_bin):
         chrome_options.binary_location = render_bin
     
-    # By NOT passing a Service or executable_path, Selenium 4.10+ 
-    # will automatically find and download the correct v148 driver.
+    # Initializing without service uses Selenium 4.10+ built-in manager
     return webdriver.Chrome(options=chrome_options)
 
 def is_success(driver):
-    """Checks if the result page is visible (no 'No data found' error)."""
+    """Checks for the absence of the 'No data found' error message."""
     try:
         time.sleep(1.2) 
         error_elements = driver.find_elements(By.ID, "err_msg")
@@ -61,6 +60,47 @@ if st.button("🚀 Start Recovery Process", type="primary"):
     
     driver = None
     try:
+        driver = get_driver()
+        driver.get(URL)
+        
+        letters = string.ascii_uppercase
+        combos = [f"{a}{b}" for a in letters for b in letters]
+        
+        for i, prefix in enumerate(combos):
+            full_id = f"{prefix}{suffix_val}"
+            
+            # Update UI
+            status_container.info(f"Testing: **{full_id}** ({i+1}/{len(combos)})")
+            progress_bar.progress((i + 1) / len(combos))
+            
+            try:
+                # Use JS injection to fill and submit
+                driver.execute_script(f"document.getElementById('rroll').value = '{roll_val}';")
+                driver.execute_script(f"document.getElementById('admn_id').value = '{full_id}';")
+                driver.execute_script("document.getElementById('submit').click();")
+                
+                time.sleep(delay_val)
+                
+                if is_success(driver):
+                    st.balloons()
+                    st.success(f"🎉 **MATCH FOUND!** Admit Card ID: `{full_id}`")
+                    st.code(full_id, language="text")
+                    break
+                else:
+                    log_area.write(f"❌ {full_id}: Incorrect")
+                    
+            except Exception:
+                driver.get(URL)
+                continue
+                
+        else:
+            st.warning("All combinations tested. No match found.")
+            
+    except Exception as e:
+        st.error(f"Critical System Error: {e}")
+    finally:
+        if driver:
+            driver.quit()    try:
         driver = get_driver()
         driver.get(URL)
         
