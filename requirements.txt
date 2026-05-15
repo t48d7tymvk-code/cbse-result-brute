@@ -1,3 +1,2 @@
 streamlit
 selenium>=4.10.0
-webdriver_manager
