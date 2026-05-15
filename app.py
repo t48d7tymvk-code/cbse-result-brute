@@ -85,7 +85,7 @@ st.title("CBSE 12th Result Brute Forcer")
 
 roll_number = st.text_input("Roll Number", value="18615900")
 known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
-delay = st.slider("Delay between attempts (seconds)", 2.0, 6.0, 3.5, 0.5)
+delay = st.slider("Delay between attempts (seconds)", 1.0, 6.0, 3.5, 0.5)
 
 if st.button("Start Brute Force", type="primary"):
     if len(known_last_6) != 6:
