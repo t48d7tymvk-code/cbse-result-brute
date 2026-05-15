@@ -2,9 +2,10 @@
 # exit on error
 set -o errexit
 
+# 1. Install Python packages
 pip install -r requirements.txt
 
-# Install Chrome
+# 2. Install Chrome binary for Selenium
 STORAGE_DIR=/opt/render/project/src/.render/chrome
 if [ ! -d "$STORAGE_DIR" ]; then
   echo "...Downloading Chrome"
